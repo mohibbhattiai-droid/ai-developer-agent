@@ -25,9 +25,11 @@ I set up the Python project and Ollama on my laptop, designed and refined prompt
 
 ## Testing and evidence
 
-I ran the program and tested it locally. The repository includes a saved unit-test result report listing 12 passing tests, and screenshots of the demo/test workflow. Before final submission, I will make sure the test command succeeds on my machine and include a screenshot from a successful run **without** `--demo` so the live Ollama integration is clearly demonstrated.
+- **Automated tests:** The repository includes 12 test methods. The recorded output in `examples/test_results.txt` is from the previous run and records 12 passing tests; it predates the latest overwrite-intent guard and its regression assertions. Rerun `python -m unittest discover -s tests -v` on the current revision before submission and refresh the saved report with the actual output.
+- **Live LLM demonstration:** `screenshots/live_ollama_run.png` shows a recorded run in live Ollama mode, including the implementation plan, tool calls, results and final summary. That screenshot predates the latest overwrite-intent guard; capture a new live-mode screenshot from the current revision before final submission.
+- **Offline demo:** `python main.py --demo` uses a deterministic mock client, not a real LLM. It is useful for checking the tool pipeline but must not be presented as evidence of live inference.
 
-Automated tests use Python's standard library and do not require a paid API. The recorded results in the repository are supporting evidence; they are not a substitute for rerunning the tests when making further changes.
+The saved test report and screenshot are useful historical evidence, but both should be refreshed after the latest safety change so that submitted evidence matches the submitted code.
 
 ## Known limitations
 
