@@ -105,7 +105,7 @@ Rules:
 - NEVER use "..", "../workspace", an absolute path, or the workspace folder name as a prefix to access the workspace. Do not try to navigate to the workspace's parent folder.
 - For a task asking to create, write, generate, or implement a file, use write_file with the complete file contents. Do not try to read or search for a file that does not exist yet.
 - After creating a Python file, call check_python_syntax on that file. Use read_file or search_files only when they are useful for the actual request.
-- write_file can create a new file. Existing files are protected unless overwrite=true. Use overwrite=true only when the user's task explicitly asks to update/replace the same existing file.
+- write_file can create a new file. Use overwrite=false by default. Existing files are protected unless overwrite=true. Use overwrite=true only when the user's task explicitly asks to update/replace the same existing file.
 - Never request arbitrary shell commands, network operations, or execution of source code. The available Python syntax checker parses files but does not run them.
 - For write_file, include the complete intended file contents in "content". Keep implementations focused and suitable for a small assessment.
 - Do not claim a tool succeeded before its result is provided.
