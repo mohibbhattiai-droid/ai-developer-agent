@@ -13,11 +13,11 @@ It uses a **local LLM through Ollama** (default model `qwen2.5:1.5b`), so no pai
 - **Request analysis and plan**: the LLM returns a short plan plus an ordered list of tool calls as JSON.
 - **Five workspace-limited tools**: list, read, search, write and syntax-check.
 - **Visible tool log**: every run prints the tool name, arguments, and a clear SUCCESS or ERROR result.
-- **Plan validation**: obvious mistakes (parent-directory paths, a "create file" task with no `write_file` call, a missing syntax check) are caught before any tool runs, and the model is asked once to correct its plan.
+- **Plan validation**: unsafe parent-directory paths, missing required write/syntax-check steps, and `overwrite=true` without an explicit update request for that same file are caught before tools run. The model gets one correction attempt.
 - **Graceful error handling**: Ollama not running, model not installed, timeouts, malformed JSON, unknown tools, bad arguments and blocked paths are all reported cleanly, without a crash.
 - **Safety by design**: no shell access and no execution of generated code (see [Safety](#safety)).
 - **Offline demo mode** (`--demo`): a deterministic mock that checks the tool pipeline without any model.
-- **16 automated tests** using the standard `unittest` module.
+- **12 automated test methods (including overwrite-intent regression assertions)** using the standard `unittest` module.
 
 ---
 
@@ -140,7 +140,7 @@ FINAL SUMMARY
 
 | Screenshot | What it shows |
 |---|---|
-| [Live Ollama run](screenshots/live_ollama_run.png) | A real run with the local model: plan, three tool calls, results |
+| [Live Ollama run](screenshots/live_ollama_run.png) | A recorded real run with the local model: plan, three tool calls, results. **Recapture this screenshot after the latest overwrite-intent guard change before final submission.** |
 
 ---
 
@@ -206,7 +206,7 @@ ai-developer-agent/
 | Model not installed (HTTP 404) | Message with the `ollama pull <model>` command |
 | Request timeout | Message suggesting a retry or a smaller model |
 | Model returns malformed JSON | Planning error is reported; only a harmless `list_files` runs |
-| Model plans an unsafe path or omits a needed step | One correction attempt, then a clear error |
+| Model plans an unsafe path, omits a needed step, or requests an unapproved overwrite | One correction attempt, then a clear error without applying the unsafe write |
 | Unknown tool, bad arguments | Returned as a tool ERROR, and the run continues |
 | Empty or over-long task | Rejected with a clear message |
 | Any tool failure | The summary says the task was incomplete instead of claiming success |
@@ -218,7 +218,7 @@ ai-developer-agent/
 - **Workspace sandbox**: all paths must be relative. Absolute paths, `..` traversal, and paths that resolve outside the workspace are rejected. Symlinks are not followed.
 - **Secret protection**: `.env` files, private keys, `.ssh`, `.aws` and similar paths cannot be read, written or listed.
 - **No shell, no code execution**: the agent cannot run commands or execute generated code.
-- **Overwrite protection**: existing files are only replaced when `overwrite=true` is explicitly set.
+- **Overwrite protection**: existing files are only replaced when `overwrite=true` is explicitly set, and the plan validator checks that the task explicitly requests updating that same file.
 - **Size limits**: reads, writes and searches are bounded.
 
 ---
