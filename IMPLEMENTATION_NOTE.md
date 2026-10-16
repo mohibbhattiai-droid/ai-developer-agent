@@ -25,7 +25,7 @@ I set up the Python project and Ollama on my laptop, designed and refined prompt
 
 ## Testing and evidence
 
-- **Automated tests:** The repository includes 12 test methods. The recorded output in `examples/test_results.txt` is from the previous run and records 12 passing tests; it predates the latest overwrite-intent guard and its regression assertions. Rerun `python -m unittest discover -s tests -v` on the current revision before submission and refresh the saved report with the actual output.
+- **Automated tests:** The repository includes 13 test methods. The recorded output in `examples/test_results.txt` is from the previous run and records 12 passing tests; it predates the latest overwrite-intent guard and its dedicated regression test. Rerun `python -m unittest discover -s tests -v` on the current revision before submission and refresh the saved report with the actual output.
 - **Live LLM demonstration:** `screenshots/live_ollama_run.png` shows a recorded run in live Ollama mode, including the implementation plan, tool calls, results and final summary. That screenshot predates the latest overwrite-intent guard; capture a new live-mode screenshot from the current revision before final submission.
 - **Offline demo:** `python main.py --demo` uses a deterministic mock client, not a real LLM. It is useful for checking the tool pipeline but must not be presented as evidence of live inference.
 
