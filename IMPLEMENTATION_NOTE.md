@@ -1,42 +1,31 @@
 # Implementation and AI-use note
 
-## What the project implements
+## What I implemented
 
-This project is a Python command-line AI Developer Agent. It accepts a natural-language task, asks an LLM for a short plan and ordered tool calls, executes tools from an allowlist inside a selected workspace, prints each tool call and result, and produces a final summary.
+This is a Python command-line AI Developer Agent. It accepts a natural-language task, asks a local LLM for a short implementation plan and ordered tool calls, executes approved tools in a bounded workspace, prints the results, and summarizes the run.
 
-The five tools are:
-- `list_files` — list files in the workspace.
-- `read_file` — read a UTF-8 text file.
-- `search_files` — search supported text files.
-- `write_file` — create files and update existing files only when overwrite is explicitly enabled.
-- `check_python_syntax` — parse a Python file with `ast.parse` without executing it.
-
-The tool layer restricts access to the workspace, blocks common credential/private-key paths, and returns errors for invalid calls instead of intentionally allowing arbitrary shell commands.
+The five tools are `list_files`, `read_file`, `search_files`, `write_file`, and `check_python_syntax`. The tool layer blocks unsafe paths and likely secret files, refuses unapproved overwrites, and returns controlled errors. The syntax checker parses source with `ast.parse`; it does not execute generated code.
 
 ## My contribution
 
-I set up the Python project and Ollama on my laptop, designed and refined prompts and tool behavior, integrated the project modules, fixed errors, ran the program and tested it locally, reviewed the code to understand how it works, and prepared the README, screenshots, and supporting documentation.
+I set up the Python project and local Ollama environment, refined the prompts and tool behavior, integrated the modules, troubleshot errors, ran and reviewed the program, and prepared the documentation and testing evidence. I reviewed the code and used the AI assistance described below; I am not claiming that every line was written without assistance.
 
-## AI tools and runtime model used
+## AI tools and runtime
 
-- **ChatGPT:** used as an AI development assistant to help with design, code drafting, reviewing, troubleshooting, testing ideas, and documentation. The implementation was developed with AI assistance; I reviewed the code, integrated components, and ran the project rather than claiming every line was written without assistance.
-- **Ollama with `qwen2.5:1.5b`:** the intended live runtime. The application calls the local Ollama `/api/chat` endpoint. No paid model API key is required.
-- **Offline demo mode:** `python main.py --demo` uses a deterministic mock client, not a real LLM. It is useful for smoke-testing tool execution and logging when the model is unavailable, but it must not be presented as evidence of live inference.
+- **ChatGPT:** assisted with design, code drafting, code review, troubleshooting, test ideas, and documentation.
+- **Ollama + `qwen2.5:1.5b`:** the intended live model, accessed through the local `/api/chat` endpoint. No paid API key is required.
+- **Offline demo:** `python main.py --demo` uses a deterministic mock client, not an LLM. It verifies the tool pipeline only.
 
-## Testing and evidence
+## Verification and evidence
 
-- **Automated tests:** The repository includes 13 test methods. The recorded output in `examples/test_results.txt` is from the previous run and records 12 passing tests; it predates the latest overwrite-intent guard and its dedicated regression test. Rerun `python -m unittest discover -s tests -v` on the current revision before submission and refresh the saved report with the actual output.
-- **Live LLM demonstration:** `screenshots/live_ollama_run.png` shows a recorded run in live Ollama mode, including the implementation plan, tool calls, results and final summary. That screenshot predates the latest overwrite-intent guard; capture a new live-mode screenshot from the current revision before final submission.
-- **Offline demo:** `python main.py --demo` uses a deterministic mock client, not a real LLM. It is useful for checking the tool pipeline but must not be presented as evidence of live inference.
+The GitHub Actions workflow ran on Python 3.10, 3.11, and 3.12. All three jobs passed, including **13 unit tests and the offline demo smoke test** in each job. [View the CI run](https://github.com/mohibbhattiai-droid/ai-developer-agent/actions/runs/38979797775). The report is saved in [`examples/test_results.txt`](examples/test_results.txt).
 
-The saved test report and screenshot are useful historical evidence, but both should be refreshed after the latest safety change so that submitted evidence matches the submitted code.
+[`screenshots/live_ollama_run.png`](screenshots/live_ollama_run.png) shows a real live Ollama run from before the latest overwrite-intent safety guard. It illustrates the live interaction, but should be recaptured from the final revision for perfectly current visual evidence. Do not present the offline mock demo as real LLM inference.
 
-## Known limitations
+## Limitations
 
-- Results depend on the local model's quality. A small model can return malformed JSON or choose an unsuitable tool.
-- Python syntax validation does not establish that a program's behavior is correct; the checker parses code but does not execute it.
-- The tool layer intentionally does not offer unrestricted shell execution or execute generated source code.
-- The agent plans once and then runs the tools. It does not read tool results and re-plan, so it is not a full iterative agent loop.
-- There is no shell or test-execution tool, by design.
-- A small model can write a final summary that overstates what happened. The program overrides the summary when a tool fails, but it cannot catch every inaccurate claim.
-- The project is a focused assessment prototype, not a production autonomous software engineer. Generated changes should be reviewed before being used in a real project.
+- Small models can produce weak plans, malformed responses, or unsuitable code.
+- Planning is single-pass; the agent does not inspect tool results and re-plan.
+- Syntax checking does not establish correctness, and generated code is not executed.
+- Arbitrary shell commands and test execution by the agent are intentionally unsupported.
+- This is an assessment prototype, not a production autonomous coding system.
