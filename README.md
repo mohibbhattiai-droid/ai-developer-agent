@@ -17,7 +17,7 @@ It uses a **local LLM through Ollama** (default model `qwen2.5:1.5b`), so no pai
 - **Graceful error handling**: Ollama not running, model not installed, timeouts, malformed JSON, unknown tools, bad arguments and blocked paths are all reported cleanly, without a crash.
 - **Safety by design**: no shell access and no execution of generated code (see [Safety](#safety)).
 - **Offline demo mode** (`--demo`): a deterministic mock that checks the tool pipeline without any model.
-- **12 automated test methods (including overwrite-intent regression assertions)** using the standard `unittest` module.
+- **13 automated test methods, including a dedicated overwrite-intent regression test** using the standard `unittest` module.
 
 ---
 
