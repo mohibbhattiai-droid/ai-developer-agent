@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_dev_agent.agent import DeveloperAgent
+from ai_dev_agent.agent import DeveloperAgent, _plan_issues
 from ai_dev_agent.tools import WorkspaceTools
 
 
@@ -44,6 +44,36 @@ class DeveloperAgentTests(unittest.TestCase):
             self.assertTrue(result.events[1].outcome["result"]["valid"])
             self.assertIn("passed", result.summary)
             self.assertTrue((root / "helper.py").exists())
+
+            # A create task must not silently approve overwrite=true.
+            create_calls = [{
+                "name": "write_file",
+                "arguments": {
+                    "path": "live_demo.py",
+                    "content": "def greet(name):\\n    return f'Hello, {name}'\\n",
+                    "overwrite": True,
+                },
+            }]
+            create_issues = _plan_issues(
+                "Create live_demo.py with a greet(name) function and check its syntax.",
+                create_calls,
+            )
+            self.assertTrue(any("overwrite=true" in issue for issue in create_issues))
+
+            # An explicit update request for that same file may overwrite it.
+            update_calls = [{
+                "name": "write_file",
+                "arguments": {
+                    "path": "greeting.py",
+                    "content": "def greet(name):\\n    return name\\n",
+                    "overwrite": True,
+                },
+            }]
+            update_issues = _plan_issues(
+                "Update greeting.py to add a docstring.",
+                update_calls,
+            )
+            self.assertFalse(any("overwrite=true" in issue for issue in update_issues))
 
     def test_model_failure_is_reported_and_workspace_is_not_modified(self):
         with tempfile.TemporaryDirectory() as temp:
