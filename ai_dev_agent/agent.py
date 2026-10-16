@@ -149,11 +149,11 @@ def _plan_issues(task: str, calls: list[dict[str, Any]]) -> list[str]:
             continue
         path = arguments.get("path")
         if isinstance(path, str):
-            normalized = path.replace("\\\\", "/")
+            normalized = path.replace("\\", "/")
             windows_path = PureWindowsPath(path)
             if (
                 ".." in normalized.split("/")
-                or path.startswith(("/", "\\\\"))
+                or path.startswith(("/", "\\"))
                 or windows_path.is_absolute()
                 or bool(windows_path.drive)
             ):
@@ -163,14 +163,56 @@ def _plan_issues(task: str, calls: list[dict[str, Any]]) -> list[str]:
                 )
 
     task_lower = task.casefold()
-    action = re.search(r"\\b(create|write|generate|implement|build|make|add|update|modify|edit)\\b", task_lower)
-    artifact = re.search(r"\\b(file|module|script|function|class|code|\\.py|\\.md|\\.txt|\\.json)\\b", task_lower)
-    needs_file_write = bool(action and artifact)
-    if needs_file_write and not any(call.get("name") == "write_file" for call in calls):
+    action_words = ("create", "write", "generate", "implement", "build", "make", "add", "update", "modify", "edit")
+    artifact_words = ("file", "module", "script", "function", "class", "code", ".py", ".md", ".txt", ".json")
+    needs_file_write = any(word in task_lower for word in action_words) and any(
+        word in task_lower for word in artifact_words
+    )
+    write_calls = [
+        call for call in calls
+        if call.get("name") == "write_file" and isinstance(call.get("arguments"), dict)
+    ]
+    if needs_file_write and not write_calls:
         issues.append(
             "The task asks to create or change an artifact, but the plan contains no write_file call. "
             "Include write_file with the complete content, then validate the file if applicable."
         )
+
+    # If the user explicitly names a file, insist that write_file targets that name.
+    requested_files: list[str] = []
+    for token in task.split():
+        candidate = token.strip("'\".,:;()[]{}")
+        if candidate.casefold().endswith((".py", ".md", ".txt", ".json", ".csv", ".yml", ".yaml")):
+            requested_files.append(candidate.replace("\\", "/").rsplit("/", 1)[-1].casefold())
+    for filename in requested_files:
+        target_written = any(
+            isinstance(call["arguments"].get("path"), str)
+            and call["arguments"]["path"].replace("\\", "/").rsplit("/", 1)[-1].casefold() == filename
+            for call in write_calls
+        )
+        if not target_written:
+            issues.append(
+                f"The task explicitly names {filename!r}, but no write_file call targets that filename."
+            )
+
+    # A Python syntax-check request must include validation after file creation.
+    if requested_files and any(name.endswith(".py") for name in requested_files):
+        asks_to_check = "check" in task_lower or "syntax" in task_lower or "validate" in task_lower
+        if asks_to_check:
+            syntax_calls = [
+                call for call in calls
+                if call.get("name") == "check_python_syntax"
+                and isinstance(call.get("arguments"), dict)
+                and isinstance(call["arguments"].get("path"), str)
+            ]
+            for filename in requested_files:
+                if filename.endswith(".py") and not any(
+                    call["arguments"]["path"].replace("\\", "/").rsplit("/", 1)[-1].casefold() == filename
+                    for call in syntax_calls
+                ):
+                    issues.append(
+                        f"The task asks to validate {filename!r}, but no matching check_python_syntax call is present."
+                    )
     return issues
 
 
@@ -216,12 +258,13 @@ class DeveloperAgent:
             if issues:
                 repair_prompt = (
                     "The previous proposed plan is invalid or incomplete. Correct it before any tools run.\n"
-                    f"USER TASK:\\n{task}\\n\\n"
-                    f"PREVIOUS PLAN AND TOOL CALLS:\\n{json.dumps({'plan': plan, 'tool_calls': calls}, ensure_ascii=False)}\\n\\n"
-                    f"PROBLEMS TO FIX:\\n- " + "\\n- ".join(issues) + "\\n\\n"
-                    "Return only the required JSON object. Do not use parent paths. The workspace root is already selected: "
-                    "use '.' for the root and filenames such as 'greeting.py' for files in it. "
-                    "For a file-creation task, use write_file with complete content and then check_python_syntax for Python."
+                    f"USER TASK:\n{task}\n\n"
+                    f"PREVIOUS PLAN AND TOOL CALLS:\n{json.dumps({'plan': plan, 'tool_calls': calls}, ensure_ascii=False)}\n\n"
+                    "PROBLEMS TO FIX:\n- " + "\n- ".join(issues) + "\n\n"
+                    "Return only the required JSON object. The workspace root is already selected. "
+                    "Use '.' for the root and filenames such as 'greeting.py' for files in it. "
+                    "Never use '..' or '../workspace'. For a file-creation task, use write_file "
+                    "with complete content and then check_python_syntax for Python when requested."
                 )
                 repaired_raw = self.llm.chat(
                     [
@@ -278,6 +321,7 @@ class DeveloperAgent:
             ],
             "planning_error": analysis_error,
         }
+        failed_events = [event for event in events if not event.outcome.get("ok")]
         if analysis_error:
             summary = (
                 f"{analysis_error}\n"
@@ -285,13 +329,21 @@ class DeveloperAgent:
                 "A safe workspace listing was run so the app could report a controlled error. "
                 "Check the Ollama service and model, then retry."
             )
+        elif failed_events:
+            # Do not let a small model claim success when observed tool results contain errors.
+            failed_names = ", ".join(event.name for event in failed_events)
+            summary = (
+                f"Task execution was incomplete: {len(failed_events)} of {len(events)} tool call(s) failed. "
+                f"Failed tool(s): {failed_names}. Review the tool log above; successful completion "
+                "and validation have not been established."
+            )
         else:
             try:
                 summary = self.llm.chat([
                     {"role": "system", "content": (
                         "Summarize this developer-agent run in plain text. Be concise and honest. "
-                        "Mention successful changes, failed tools, and whether validation passed. "
-                        "Never claim a failure was a success. Do not suggest that source code was executed."
+                        "Mention successful changes and whether validation passed. "
+                        "Do not suggest that source code was executed."
                     )},
                     {"role": "user", "content": json.dumps(summary_prompt, ensure_ascii=False)},
                 ]).strip()
@@ -299,6 +351,5 @@ class DeveloperAgent:
                     raise ValueError("Empty summary")
             except Exception as exc:
                 successes = sum(1 for event in events if event.outcome.get("ok"))
-                failures = len(events) - successes
-                summary = f"Finished {len(events)} tool call(s): {successes} succeeded, {failures} failed. Summary generation was unavailable ({exc})."
+                summary = f"Finished {len(events)} tool call(s): {successes} succeeded. Summary generation was unavailable ({exc})."
         return AgentResult(task=task, plan=plan, events=events, summary=summary, analysis_error=analysis_error)
