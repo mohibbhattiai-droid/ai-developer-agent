@@ -105,7 +105,7 @@ Rules:
 - NEVER use "..", "../workspace", an absolute path, or the workspace folder name as a prefix to access the workspace. Do not try to navigate to the workspace's parent folder.
 - For a task asking to create, write, generate, or implement a file, use write_file with the complete file contents. Do not try to read or search for a file that does not exist yet.
 - After creating a Python file, call check_python_syntax on that file. Use read_file or search_files only when they are useful for the actual request.
-- write_file can create a new file. Existing files are protected unless overwrite=true. Use overwrite=true only when the user's task explicitly asks to update/replace an existing file.
+- write_file can create a new file. Existing files are protected unless overwrite=true. Use overwrite=true only when the user's task explicitly asks to update/replace the same existing file.
 - Never request arbitrary shell commands, network operations, or execution of source code. The available Python syntax checker parses files but does not run them.
 - For write_file, include the complete intended file contents in "content". Keep implementations focused and suitable for a small assessment.
 - Do not claim a tool succeeded before its result is provided.
@@ -139,6 +139,29 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     return value
 
 
+def _task_explicitly_updates_path(task: str, path: str) -> bool:
+    """Return True only when the user's wording explicitly asks to update this path."""
+    task_lower = task.casefold()
+    normalized_path = path.replace("\\", "/").strip("/")
+    basename = normalized_path.rsplit("/", 1)[-1]
+    stem = basename.rsplit(".", 1)[0] if "." in basename else basename
+    aliases = sorted({normalized_path.casefold(), basename.casefold(), stem.casefold()}, key=len, reverse=True)
+    update_verbs = r"(?:update|modify|edit|replace|overwrite|revise|refactor|fix|change)"
+    add_verbs = r"(?:add|insert|append|extend)"
+
+    for alias in aliases:
+        if not alias:
+            continue
+        target = re.escape(alias)
+        # Accept an explicit action directed at the named file, e.g. "Update greeting.py".
+        if re.search(rf"\b{update_verbs}\b.{{0,60}}\b{target}\b", task_lower):
+            return True
+        # Also accept clear additive edits, e.g. "Add a docstring to greeting.py".
+        if re.search(rf"\b{add_verbs}\b.{{0,60}}\b(?:to|into|in)\b.{{0,60}}\b{target}\b", task_lower):
+            return True
+    return False
+
+
 def _plan_issues(task: str, calls: list[dict[str, Any]]) -> list[str]:
     """Detect common small-model planning mistakes before any tools are run."""
     issues: list[str] = []
@@ -163,6 +186,25 @@ def _plan_issues(task: str, calls: list[dict[str, Any]]) -> list[str]:
                 )
 
     task_lower = task.casefold()
+
+    # Never let the model replace a file unless the user's task explicitly directs
+    # an update to that same path. If intent is unclear, ask the model to repair its plan
+    # before any tool executes; if it cannot, the run falls back to a harmless listing.
+    for index, call in enumerate(calls, start=1):
+        arguments = call.get("arguments", {})
+        if (
+            call.get("name") == "write_file"
+            and isinstance(arguments, dict)
+            and arguments.get("overwrite") is True
+        ):
+            path = arguments.get("path")
+            if not isinstance(path, str) or not _task_explicitly_updates_path(task, path):
+                issues.append(
+                    f"Tool call {index} requests write_file with overwrite=true, but the task "
+                    "does not explicitly request updating that same file. Use overwrite=false "
+                    "unless the user clearly asks to modify or replace the named file."
+                )
+
     action_words = ("create", "write", "generate", "implement", "build", "make", "add", "update", "modify", "edit")
     artifact_words = ("file", "module", "script", "function", "class", "code", ".py", ".md", ".txt", ".json")
     needs_file_write = any(word in task_lower for word in action_words) and any(
