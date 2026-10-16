@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import PureWindowsPath
 from typing import Any, Protocol
 
 from .tools import WorkspaceTools
@@ -98,13 +100,21 @@ Return ONLY one JSON object with exactly these keys:
 Rules:
 - Choose only tools in the supplied catalogue. Tool calls are executed in order.
 - Use 2 to 5 concise plan steps and no more than 6 tool calls.
-- For coding tasks, inspect files first with list_files or read_file when useful; create/update files, then check Python syntax when applicable.
+- The workspace root is already selected for you. Every tool path must be relative to that root.
+- For the workspace root, use path ".". For a file directly in the root, use only its filename, for example "greeting.py".
+- NEVER use "..", "../workspace", an absolute path, or the workspace folder name as a prefix to access the workspace. Do not try to navigate to the workspace's parent folder.
+- For a task asking to create, write, generate, or implement a file, use write_file with the complete file contents. Do not try to read or search for a file that does not exist yet.
+- After creating a Python file, call check_python_syntax on that file. Use read_file or search_files only when they are useful for the actual request.
 - write_file can create a new file. Existing files are protected unless overwrite=true. Use overwrite=true only when the user's task explicitly asks to update/replace an existing file.
-- All paths must be relative to the workspace; never use absolute paths, '..', or access credentials/secrets.
 - Never request arbitrary shell commands, network operations, or execution of source code. The available Python syntax checker parses files but does not run them.
 - For write_file, include the complete intended file contents in "content". Keep implementations focused and suitable for a small assessment.
 - Do not claim a tool succeeded before its result is provided.
-- If the task is explanatory and no change is required, use list_files as a harmless workspace inspection, then explain in the final summary.
+
+Example:
+Task: Create greeting.py with a greet(name) function that returns Hello followed by the person's name. Check its Python syntax.
+Use write_file with path "greeting.py" and the complete code, then check_python_syntax with path "greeting.py". Do not use "../workspace".
+
+If the task is explanatory and no change is required, use list_files as a harmless workspace inspection, then explain in the final summary.
 """
 
 
@@ -127,6 +137,41 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("The model response must be a JSON object.")
     return value
+
+
+def _plan_issues(task: str, calls: list[dict[str, Any]]) -> list[str]:
+    """Detect common small-model planning mistakes before any tools are run."""
+    issues: list[str] = []
+    for index, call in enumerate(calls, start=1):
+        arguments = call.get("arguments", {})
+        if not isinstance(arguments, dict):
+            issues.append(f"Tool call {index} arguments must be a JSON object.")
+            continue
+        path = arguments.get("path")
+        if isinstance(path, str):
+            normalized = path.replace("\\\\", "/")
+            windows_path = PureWindowsPath(path)
+            if (
+                ".." in normalized.split("/")
+                or path.startswith(("/", "\\\\"))
+                or windows_path.is_absolute()
+                or bool(windows_path.drive)
+            ):
+                issues.append(
+                    f"Tool call {index} ({call.get('name', 'unknown')}) has an unsafe path {path!r}; "
+                    "paths must be relative to the already-selected workspace root."
+                )
+
+    task_lower = task.casefold()
+    action = re.search(r"\\b(create|write|generate|implement|build|make|add|update|modify|edit)\\b", task_lower)
+    artifact = re.search(r"\\b(file|module|script|function|class|code|\\.py|\\.md|\\.txt|\\.json)\\b", task_lower)
+    needs_file_write = bool(action and artifact)
+    if needs_file_write and not any(call.get("name") == "write_file" for call in calls):
+        issues.append(
+            "The task asks to create or change an artifact, but the plan contains no write_file call. "
+            "Include write_file with the complete content, then validate the file if applicable."
+        )
+    return issues
 
 
 class DeveloperAgent:
@@ -164,6 +209,47 @@ class DeveloperAgent:
                 calls = [item for item in raw_calls if isinstance(item, dict)][:MAX_TOOL_CALLS]
             if not plan:
                 plan = ["Inspect the workspace", "Perform the requested task using the available safe tools", "Review tool results"]
+
+            # Small local models sometimes propose parent-directory paths or omit the
+            # actual write step. Ask once for a corrected plan before executing anything.
+            issues = _plan_issues(task, calls)
+            if issues:
+                repair_prompt = (
+                    "The previous proposed plan is invalid or incomplete. Correct it before any tools run.\n"
+                    f"USER TASK:\\n{task}\\n\\n"
+                    f"PREVIOUS PLAN AND TOOL CALLS:\\n{json.dumps({'plan': plan, 'tool_calls': calls}, ensure_ascii=False)}\\n\\n"
+                    f"PROBLEMS TO FIX:\\n- " + "\\n- ".join(issues) + "\\n\\n"
+                    "Return only the required JSON object. Do not use parent paths. The workspace root is already selected: "
+                    "use '.' for the root and filenames such as 'greeting.py' for files in it. "
+                    "For a file-creation task, use write_file with complete content and then check_python_syntax for Python."
+                )
+                repaired_raw = self.llm.chat(
+                    [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": repair_prompt},
+                    ],
+                    json_mode=True,
+                )
+                repaired = _parse_json_object(repaired_raw)
+                repaired_plan = repaired.get("plan", [])
+                repaired_calls = repaired.get("tool_calls", [])
+                if isinstance(repaired_plan, list):
+                    candidate_plan = [str(item).strip()[:300] for item in repaired_plan if str(item).strip()][:6]
+                else:
+                    candidate_plan = []
+                if isinstance(repaired_calls, list):
+                    candidate_calls = [item for item in repaired_calls if isinstance(item, dict)][:MAX_TOOL_CALLS]
+                else:
+                    candidate_calls = []
+                remaining_issues = _plan_issues(task, candidate_calls)
+                if remaining_issues:
+                    raise ValueError(
+                        "The model's corrected plan is still invalid: " + "; ".join(remaining_issues)
+                    )
+                if not candidate_calls:
+                    raise ValueError("The model's corrected plan contained no tool calls.")
+                plan = candidate_plan or plan
+                calls = candidate_calls
         except Exception as exc:
             analysis_error = f"Planning failed: {exc}"
             plan = ["Inspect the workspace safely", "Report the planning issue without making file changes"]
