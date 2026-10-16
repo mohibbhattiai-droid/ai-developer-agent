@@ -149,16 +149,24 @@ def _task_explicitly_updates_path(task: str, path: str) -> bool:
     update_verbs = r"(?:update|modify|edit|replace|overwrite|revise|refactor|fix|change)"
     add_verbs = r"(?:add|insert|append|extend)"
 
+    negation = r"(?:\bdo\s+not|\bdon't|\bnever|\bavoid)\s+$"
+
     for alias in aliases:
         if not alias:
             continue
         target = re.escape(alias)
         # Accept an explicit action directed at the named file, e.g. "Update greeting.py".
-        if re.search(rf"\b{update_verbs}\b.{{0,60}}\b{target}\b", task_lower):
-            return True
+        update_pattern = re.compile(rf"\b{update_verbs}\b.{{0,60}}\b{target}\b")
+        for match in update_pattern.finditer(task_lower):
+            prefix = task_lower[max(0, match.start() - 24):match.start()]
+            if not re.search(negation, prefix):
+                return True
         # Also accept clear additive edits, e.g. "Add a docstring to greeting.py".
-        if re.search(rf"\b{add_verbs}\b.{{0,60}}\b(?:to|into|in)\b.{{0,60}}\b{target}\b", task_lower):
-            return True
+        add_pattern = re.compile(rf"\b{add_verbs}\b.{{0,60}}\b(?:to|into|in)\b.{{0,60}}\b{target}\b")
+        for match in add_pattern.finditer(task_lower):
+            prefix = task_lower[max(0, match.start() - 24):match.start()]
+            if not re.search(negation, prefix):
+                return True
     return False
 
 
