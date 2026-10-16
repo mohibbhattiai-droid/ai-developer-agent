@@ -76,6 +76,13 @@ class DeveloperAgentTests(unittest.TestCase):
         )
         self.assertFalse(any("overwrite=true" in issue for issue in update_issues))
 
+        # A negated update instruction must not grant overwrite permission.
+        negated_issues = _plan_issues(
+            "Do not update greeting.py.",
+            update_calls,
+        )
+        self.assertTrue(any("overwrite=true" in issue for issue in negated_issues))
+
     def test_model_failure_is_reported_and_workspace_is_not_modified(self):
         with tempfile.TemporaryDirectory() as temp:
             llm = FailingLLM()
