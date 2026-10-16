@@ -45,6 +45,7 @@ class DeveloperAgentTests(unittest.TestCase):
             self.assertIn("passed", result.summary)
             self.assertTrue((root / "helper.py").exists())
 
+    def test_overwrite_requires_explicit_update_intent(self):
         # A create task must not silently approve overwrite=true.
         create_calls = [{
             "name": "write_file",
