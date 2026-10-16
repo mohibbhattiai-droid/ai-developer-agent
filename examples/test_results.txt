@@ -1,0 +1,17 @@
+test_agent_executes_tools_and_summarizes (test_agent.DeveloperAgentTests.test_agent_executes_tools_and_summarizes) ... ok
+test_empty_task_is_rejected (test_agent.DeveloperAgentTests.test_empty_task_is_rejected) ... ok
+test_model_failure_is_reported_and_workspace_is_not_modified (test_agent.DeveloperAgentTests.test_model_failure_is_reported_and_workspace_is_not_modified) ... ok
+test_explicit_overwrite_works (test_tools.WorkspaceToolsTests.test_explicit_overwrite_works) ... ok
+test_likely_secret_files_are_blocked (test_tools.WorkspaceToolsTests.test_likely_secret_files_are_blocked) ... ok
+test_non_boolean_overwrite_is_rejected (test_tools.WorkspaceToolsTests.test_non_boolean_overwrite_is_rejected) ... ok
+test_path_traversal_and_absolute_paths_are_blocked (test_tools.WorkspaceToolsTests.test_path_traversal_and_absolute_paths_are_blocked) ... ok
+test_python_syntax_check_passes_and_fails (test_tools.WorkspaceToolsTests.test_python_syntax_check_passes_and_fails) ... ok
+test_refuses_overwrite_without_explicit_flag (test_tools.WorkspaceToolsTests.test_refuses_overwrite_without_explicit_flag) ... ok
+test_search_files (test_tools.WorkspaceToolsTests.test_search_files) ... ok
+test_unknown_tool_is_handled (test_tools.WorkspaceToolsTests.test_unknown_tool_is_handled) ... ok
+test_write_read_and_list (test_tools.WorkspaceToolsTests.test_write_read_and_list) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.008s
+
+OK

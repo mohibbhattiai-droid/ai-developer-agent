@@ -1,0 +1,16 @@
+usage: main.py [-h] [--task TASK] [--workspace WORKSPACE] [--model MODEL]
+               [--host HOST] [--demo]
+
+A local-first AI developer agent with workspace-safe tools.
+
+options:
+  -h, --help            show this help message and exit
+  --task TASK           Natural-language development task. If omitted, you'll
+                        be prompted. (default: None)
+  --workspace WORKSPACE
+                        Project directory the agent is allowed to access.
+                        (default: None)
+  --model MODEL         Installed Ollama model name. (default: qwen2.5:1.5b)
+  --host HOST           Ollama API base URL. (default: http://localhost:11434)
+  --demo                Run a deterministic offline smoke test (does not use a
+                        real LLM). (default: False)

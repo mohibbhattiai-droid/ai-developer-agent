@@ -1,0 +1,54 @@
+AI DEVELOPER AGENT — OFFLINE DEMO MODE
+Note: this uses a deterministic mock LLM for smoke testing; live mode uses Ollama.
+
+Workspace: /mnt/data/ai-developer-agent/demo_workspace/run-oz7755nc
+Task: Create a small calculator module and check its Python syntax.
+
+IMPLEMENTATION PLAN
+  1. Inspect the demo workspace.
+  2. Create a small calculator module with add and subtract functions.
+  3. Parse the new Python file to verify syntax without executing it.
+
+TOOL EXECUTION LOG
+
+[1] TOOL CALL: list_files
+    Arguments: {
+  "path": "."
+}
+    RESULT: SUCCESS
+    Output:
+      {
+        "directory": ".",
+        "files": [],
+        "count": 0,
+        "truncated": false
+      }
+
+[2] TOOL CALL: write_file
+    Arguments: {
+  "path": "calculator.py",
+  "overwrite": false,
+  "content": "<file content: 283 characters; omitted from log>"
+}
+    RESULT: SUCCESS
+    Output:
+      {
+        "path": "calculator.py",
+        "action": "created",
+        "bytes_written": 283
+      }
+
+[3] TOOL CALL: check_python_syntax
+    Arguments: {
+  "path": "calculator.py"
+}
+    RESULT: SUCCESS
+    Output:
+      {
+        "path": "calculator.py",
+        "valid": true,
+        "message": "Python syntax is valid. File was parsed but not executed."
+      }
+
+FINAL SUMMARY
+Demo completed successfully. The calculator.py file was created in the isolated demo workspace, and the Python syntax checker passed. This offline smoke test uses a deterministic mock LLM; run without --demo to use the live local Ollama model.
